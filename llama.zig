@@ -677,14 +677,34 @@ pub fn sample(logits: []f32, temp: f32, topp: f32, rng: *std.Random.DefaultPrng)
         for (logits, 0..) |p, i| { cdf += p; if (r < cdf) return @intCast(i); }
         return @intCast(logits.len - 1);
     }
+
     var pi = std.ArrayList(ProbIndex).init(std.heap.page_allocator); defer pi.deinit();
-    for (logits, 0..) |p, i| pi.append(.{ .prob = p, .index = @intCast(i) }) catch unreachable;
+    // Only add tokens with probability > 0 (or a small threshold) to speed up sorting
+    const threshold = (1.0 - topp) / @as(f32, @floatFromInt(logits.len));
+    for (logits, 0..) |p, i| {
+        if (p > threshold) pi.append(.{ .prob = p, .index = @intCast(i) }) catch unreachable;
+    }
+
+    if (pi.items.len == 0) return argmax(logits);
+
     std.sort.pdq(ProbIndex, pi.items, {}, ProbIndex.compare);
     var cprob: f32 = 0; var lidx: usize = pi.items.len - 1;
     for (pi.items, 0..) |p, i| { cprob += p.prob; if (cprob > topp) { lidx = i; break; } }
     const r = rng.random().float(f32) * cprob; var cdf: f32 = 0;
     for (pi.items[0 .. lidx + 1]) |p| { cdf += p.prob; if (r < cdf) return p.index; }
     return pi.items[lidx].index;
+}
+
+fn argmax(logits: []const f32) u32 {
+    var max_idx: u32 = 0;
+    var max_val = logits[0];
+    for (logits, 0..) |v, i| {
+        if (v > max_val) {
+            max_val = v;
+            max_idx = @intCast(i);
+        }
+    }
+    return max_idx;
 }
 
 pub fn generate(config: Config, state: *State, weights: Weights, tokenizer: Tokenizer, prompt: []const u32, max_tok: usize, temp: f32, topp: f32, rng: *std.Random.DefaultPrng, allocator: mem.Allocator, pool: ?*std.Thread.Pool, stream: bool, echo: bool) !void {
