@@ -1,0 +1,12 @@
+[package]
+name = "llama3_rust"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+byteorder = "1.5.0"
+clap = { version = "4.0", features = ["derive"] }
+half = "2.7.1"
+memmap2 = "0.9.10"
+rand = "0.10.0"
+rayon = "1.11.0"
